@@ -33,6 +33,8 @@ setup(
             'inverse_kinematics_body_jacobian_node = ros2_to_mujoco_nero.inverse_kinematics_body_jacobian_node:main',
             'generator_node = ros2_to_mujoco_nero.generator_node:main',
             'intercept_node = ros2_to_mujoco_nero.intercept_node:main',
+            'ultrasonic_sensor_node = ros2_to_mujoco_nero.ultrasonic_sensor_node:main',
+            'ultrasound_node = ros2_to_mujoco_nero.ultrasonic_sensor_node:main'
         ],
     },
 )
