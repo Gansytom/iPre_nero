@@ -99,7 +99,11 @@ def launch_setup(context, *args, **kwargs):
 
     mujoco_sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(mujoco_launch),
-        launch_arguments={"scene": LaunchConfiguration("scene")}.items(),
+        launch_arguments={
+            "scene": LaunchConfiguration("scene"),
+            "model_dir": LaunchConfiguration("model_dir"),
+            "viewer_args": LaunchConfiguration("viewer_args"),
+        }.items(),
     )
 
     rsp = Node(
@@ -130,6 +134,16 @@ def generate_launch_description():
             default_value="scene.xml",
             choices=["scene.xml", "scene_nero_arm.xml", "nero.xml", "nero_arm.xml"],
             description="Escena MuJoCo a cargar (se pasa a display_mujoco.launch.py)",
+        ),
+        DeclareLaunchArgument(
+            "model_dir",
+            default_value="",
+            description="Carpeta con los XML de la escena (se pasa a display_mujoco.launch.py)",
+        ),
+        DeclareLaunchArgument(
+            "viewer_args",
+            default_value="",
+            description="Argumentos extra para mujoco_viewer.py (se pasan a display_mujoco.launch.py)",
         ),
         DeclareLaunchArgument(
             "end_effector",

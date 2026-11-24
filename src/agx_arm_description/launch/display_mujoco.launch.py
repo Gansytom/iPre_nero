@@ -69,6 +69,7 @@ def launch_setup(context, *args, **kwargs):
     scene = LaunchConfiguration("scene").perform(context)
     model_dir_arg = LaunchConfiguration("model_dir").perform(context)
     script_arg = LaunchConfiguration("viewer_script").perform(context)
+    viewer_args = LaunchConfiguration("viewer_args").perform(context).split()
 
     # ---- escena ----
     model_dirs = []
@@ -116,7 +117,7 @@ def launch_setup(context, *args, **kwargs):
     return [
         LogInfo(msg=f"[display_mujoco] escena: {scene_file}"),
         LogInfo(msg=f"[display_mujoco] script: {script_path}"),
-        ExecuteProcess(cmd=["python3", script_path, scene_file], output="screen"),
+        ExecuteProcess(cmd=["python3", script_path, scene_file, *viewer_args], output="screen"),
     ]
 
 
@@ -132,6 +133,11 @@ def generate_launch_description():
             "model_dir",
             default_value="",
             description="Carpeta agilex_arm/agilex_nero con los XML (opcional)",
+        ),
+        DeclareLaunchArgument(
+            "viewer_args",
+            default_value="",
+            description="Argumentos extra para mujoco_viewer.py, p. ej. '--cube-velocity 0 0.05 0'",
         ),
         DeclareLaunchArgument(
             "viewer_script",

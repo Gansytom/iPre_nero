@@ -16,6 +16,8 @@ Feedback (publicaciones):
   feedback/joint_states JointState   joint1..7, 'gripper' (ancho total, m), y despues los
                                      joints de MuJoCo (gripper_joint1/2, por dedo)
   feedback/tcp_pose     PoseStamped  pose de link7 respecto a base_link
+  sim/cube_state        Float64MultiArray  estado real del cubo [x,y,z,vx,vy,vz] (si la escena tiene 'cube')
+  distance              Range        sensor ultrasonico simulado (solo con --sensor-pose)
 
 Convenciones:
   - Poses en el marco de base_link, cuaternion ROS (x, y, z, w). Por defecto la pose
@@ -46,7 +48,8 @@ import mujoco.viewer
 
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import JointState
+from sensor_msgs.msg import JointState, Range
+from std_msgs.msg import Float64MultiArray
 from geometry_msgs.msg import PoseStamped, PoseArray
 
 ARM_JOINTS = [f'joint{i}' for i in range(1, 8)]
@@ -164,7 +167,10 @@ class MujocoBridge(Node):
                  rate_hz: float, move_j_topic: str = 'control/move_j',
                  joint_speed: float = 0.8, lin_speed: float = 0.1, gravcomp: bool = True,
                  flange_offset=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-                 flange_zero_identity: bool = False):
+                 flange_zero_identity: bool = False,
+                 cube_velocity=(0.0, 0.05, 0.0), sensor_pose=None,
+                 sensor_rate: float = 20.0, sensor_noise: float = 0.0,
+                 sensor_max: float = 4.0, cube_delay: float = 0.0):
         super().__init__('mujoco_bridge')
 
         self.joint_speed = joint_speed  # rad/s (media, norma sobre los 7 joints)
@@ -281,6 +287,9 @@ class MujocoBridge(Node):
         self.feedback_pub = self.create_publisher(JointState, feedback_topic, 10)
         self.tcp_pub = self.create_publisher(PoseStamped, 'feedback/tcp_pose', 10)
         self.create_timer(1.0 / rate_hz, self._publish_feedback)
+
+        self._setup_cube(cube_velocity, sensor_pose, sensor_rate, sensor_noise, sensor_max,
+                         cube_delay)
 
         self.get_logger().info(
             f'Comandos: "{control_topic}" (directo), "{move_j_topic}", control/move_p, '
@@ -637,9 +646,102 @@ class MujocoBridge(Node):
         ps.pose.orientation.z = float(q_b[3])
         self.tcp_pub.publish(ps)
 
+    # ------------------------------------------------------------- cubo + sensor
+    def _setup_cube(self, cube_velocity, sensor_pose, sensor_rate, sensor_noise, sensor_max,
+                    cube_delay=0.0):
+        """Cubo opcional (body 'cube' + freejoint 'cube_free' en la escena).
+
+        - Se mueve a velocidad constante hasta que el robot lo toca; desde ahi solo
+          actua la fisica (contactos con los dedos).
+        - /sim/cube_state: estado real del cubo [x, y, z, vx, vy, vz] (marco base_link),
+          solo para depurar / comparar con la estimacion.
+        - Sensor ultrasonico simulado (sensor_pose = [px, py, pz, dx, dy, dz], marco
+          base_link): lanza un rayo y publica sensor_msgs/Range en 'distance', igual que
+          ultrasonic_sensor_node con el Arduino real.
+        """
+        self._cube_enabled = False
+        try:
+            cube_body = self.model.body('cube').id
+            self._cube_geom = self.model.geom('cube_geom').id
+            joint = self.model.joint('cube_free')
+        except KeyError:
+            return
+        self._cube_qadr = int(joint.qposadr[0])
+        self._cube_dadr = int(joint.dofadr[0])
+        self._cube_vel = np.asarray(cube_velocity, dtype=float)
+        self._cube_released = False
+        self._cube_delay = float(cube_delay)   # s of simulated time the cube waits still
+        root = self.model.body_rootid[self.model.body(BASE_BODY).id]
+        self._robot_bodies = {i for i in range(1, self.model.nbody)
+                              if self.model.body_rootid[i] == root}
+        self._cube_enabled = True
+        self._cube_pub = self.create_publisher(Float64MultiArray, 'sim/cube_state', 10)
+        self.create_timer(0.02, self._publish_cube_state)
+        self.get_logger().info(f'Cubo: velocidad constante {self._cube_vel.tolist()} m/s '
+                               f'desde t = {self._cube_delay:.1f} s')
+
+        if sensor_pose is not None:
+            p = np.asarray(sensor_pose[:3], dtype=float)
+            d = np.asarray(sensor_pose[3:], dtype=float)
+            # de base_link a mundo
+            self._sensor_p = self._base_p + self._base_R @ p
+            self._sensor_d = self._base_R @ (d / np.linalg.norm(d))
+            self._sensor_noise = sensor_noise
+            self._sensor_max = sensor_max
+            self._rng = np.random.default_rng()
+            self._range_pub = self.create_publisher(Range, 'distance', 10)
+            self.create_timer(1.0 / sensor_rate, self._publish_range)
+            self.get_logger().info(
+                f'Sensor ultrasonico simulado en {p.tolist()} mirando {d.tolist()} '
+                f'({sensor_rate} Hz, ruido {sensor_noise} m) -> topic "distance"')
+
+    def _update_cube(self):
+        """Llamar con _data_lock tomado, antes de mj_step."""
+        if not self._cube_enabled or self._cube_released:
+            return
+        for c in self.data.contact[:self.data.ncon]:
+            if self._cube_geom in (c.geom1, c.geom2):
+                other = c.geom2 if c.geom1 == self._cube_geom else c.geom1
+                if int(self.model.geom_bodyid[other]) in self._robot_bodies:
+                    self._cube_released = True
+                    self.get_logger().info('El robot toco el cubo: se libera la velocidad constante.')
+                    return
+        moving = self.data.time >= self._cube_delay
+        self.data.qvel[self._cube_dadr:self._cube_dadr + 3] = self._cube_vel if moving else 0.0
+        self.data.qvel[self._cube_dadr + 3:self._cube_dadr + 6] = 0.0
+
+    def _publish_cube_state(self):
+        with self._data_lock:
+            p = self.data.qpos[self._cube_qadr:self._cube_qadr + 3].copy()
+            v = self.data.qvel[self._cube_dadr:self._cube_dadr + 3].copy()
+        msg = Float64MultiArray()
+        msg.data = np.concatenate((self._base_R.T @ (p - self._base_p),
+                                   self._base_R.T @ v)).tolist()
+        self._cube_pub.publish(msg)
+
+    def _publish_range(self):
+        geomid = np.zeros(1, dtype=np.int32)
+        with self._data_lock:
+            dist = mujoco.mj_ray(self.model, self.data, self._sensor_p, self._sensor_d,
+                                 None, 1, -1, geomid)
+        if dist < 0 or dist > self._sensor_max:
+            dist = self._sensor_max   # sin eco: el sensor real reporta su maximo
+        elif self._sensor_noise > 0:
+            dist += self._rng.normal(0.0, self._sensor_noise)
+        msg = Range()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'ultrasonic_link'
+        msg.radiation_type = Range.ULTRASOUND
+        msg.field_of_view = 0.26
+        msg.min_range = 0.02
+        msg.max_range = float(self._sensor_max)
+        msg.range = float(dist)
+        self._range_pub.publish(msg)
+
     def step(self):
         with self._data_lock:
             self._advance_trajectory()
+            self._update_cube()
             mujoco.mj_step(self.model, self.data)
 
 
@@ -665,12 +767,26 @@ def main():
     parser.add_argument('--flange-zero-identity', action='store_true',
                         default=os.environ.get('NERO_FLANGE_ZERO_IDENTITY', '') in ('1', 'true', 'True'),
                         help='Orientacion de la brida relativa a la pose en cero (identidad con q=0)')
+    parser.add_argument('--cube-velocity', type=float, nargs=3, default=[0.0, 0.05, 0.0],
+                        metavar=('VX', 'VY', 'VZ'),
+                        help='Velocidad constante del cubo (m/s, marco mundo), si la escena lo tiene')
+    parser.add_argument('--sensor-pose', type=float, nargs=6, default=None,
+                        metavar=('PX', 'PY', 'PZ', 'DX', 'DY', 'DZ'),
+                        help='Sensor ultrasonico simulado: posicion y direccion (marco base_link)')
+    parser.add_argument('--cube-delay', type=float, default=0.0,
+                        help='Segundos (simulados) que el cubo espera quieto antes de moverse')
+    parser.add_argument('--sensor-rate', type=float, default=20.0, help='Hz del sensor simulado')
+    parser.add_argument('--sensor-noise', type=float, default=0.003,
+                        help='Ruido gaussiano del sensor simulado (m, desviacion estandar)')
+    parser.add_argument('--sensor-max', type=float, default=4.0, help='Alcance maximo (m)')
     args = parser.parse_args()
 
     rclpy.init(args=sys.argv)
     bridge = MujocoBridge(args.scene, args.control_topic, args.feedback_topic, args.rate,
                           args.move_j_topic, args.joint_speed, args.lin_speed,
-                          not args.no_gravcomp, args.flange_offset, args.flange_zero_identity)
+                          not args.no_gravcomp, args.flange_offset, args.flange_zero_identity,
+                          args.cube_velocity, args.sensor_pose, args.sensor_rate,
+                          args.sensor_noise, args.sensor_max, args.cube_delay)
 
     # rclpy.spin en un hilo aparte; el hilo principal corre el viewer + la fisica
     # (mujoco.viewer.launch_passive debe llamarse desde el hilo principal).
