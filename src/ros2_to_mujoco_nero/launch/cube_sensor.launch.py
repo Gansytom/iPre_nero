@@ -46,7 +46,7 @@ def generate_launch_description():
                 'cube_source': 'sensor',
                 'distance_topic': '/distance',
                 # Sensor at the start end of the conveyor, looking along +Y
-                'sensor_position': [-0.38, -0.40, 0.084],
+                'sensor_position': [-0.22, -1.07, 0.084],
                 'sensor_direction': [0.0, 1.0, 0.0],
             }],
         ),

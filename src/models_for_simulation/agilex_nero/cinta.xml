@@ -14,9 +14,9 @@
 <!--
  Medidas totales exactas: Largo = 0.797m | Ancho = 0.090m | Alto = 0.064m 
 -->
-<!-- Ubicada frente al robot (x = -0.38 m, zona de trabajo del brazo), orientada a lo largo del eje Y del mundo.
+<!-- Ubicada frente al robot (eje en x = -0.22 m, de y = -1.05 a -0.25: termina a 25 cm de la base; el cubo avanza en +y), orientada a lo largo del eje Y del mundo.
      Angulos en radianes: nero.xml define <compiler angle="radian"/> para toda la escena. -->
-<body name="base_cinta" pos="-0.38 0 0" euler="0 0 1.5708">
+<body name="base_cinta" pos="-0.22 -0.65 0" euler="0 0 1.5708">
 <!--
  1. PATAS DE GOMA INFERIORES (elevan el chasis 1.0 cm desde Z=0) 
 -->

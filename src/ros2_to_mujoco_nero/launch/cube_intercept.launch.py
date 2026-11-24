@@ -44,7 +44,15 @@ def generate_launch_description():
             executable='intercept_node',
             name='intercept_node',
             output='screen',
-            parameters=[{'use_sim_time': True}],
+            # Conveyor along +y with its axis at x = -0.22 m, ending 25 cm from the base
+            # (models_for_simulation/agilex_nero/cinta.xml). Validated offline with the IK.
+            parameters=[{
+                'use_sim_time': True,
+                'ready_joints': [0.862, 0.557, 0.263, 1.285, -0.263, -0.433, 1.291],
+                'grasp_rpy': [0.0, 1.5707963, 0.0],   # down, fingers open along x
+                'intercept_x_range': [-0.26, -0.18],
+                'intercept_y_range': [-0.40, -0.27],
+            }],
         ),
         Node(
             package='rqt_graph',
