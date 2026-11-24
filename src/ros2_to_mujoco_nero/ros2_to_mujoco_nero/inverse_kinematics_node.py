@@ -168,7 +168,7 @@ class InverseKinematicsNode(Node):
             mujoco.mj_jacSite(self.model, self.robot_data, self.jacp, self.jacr, ee_id)
             J = np.vstack((self.jacp, self.jacr))[:, :arm_dof_count]
 
-            #NaN verification
+            # NaN verification
             if not np.all(np.isfinite(J)):
                 self.get_logger().error("Jacobian contains NaN or Inf values. IK result discarded.")
                 return

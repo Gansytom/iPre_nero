@@ -27,9 +27,12 @@ class InverseKinematicsNodeBodyJacobian(Node):
         self.ik_thread = threading.Thread(target=self.ik_worker, daemon=True)
         self.ik_thread.start()
         self.mujoco_lock = threading.Lock()
+
         # QoS profile 
         latch_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         model_path_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        ik_qos = QoSProfile(depth=10, durability=DurabilityPolicy.VOLATILE)
+
         
         # atributes 
         self.timer_pr = 0.01 # 100Hz
@@ -49,38 +52,44 @@ class InverseKinematicsNodeBodyJacobian(Node):
         self.delayed_result_timer = None
         self.init_pos_get = False
 
-        #publishers
+        # publishers
         self.publisher_state = self.create_publisher(Bool, 'inverse_kinematics_ready', latch_qos)
         self.publisher_result = self.create_publisher(JointState, 'ik/ik_result', latch_qos)
 
-        ik_qos = QoSProfile(depth=10, durability=DurabilityPolicy.VOLATILE)
-
+        # subscriptions
         self.subscription = self.create_subscription(
             Bool,
             'start_running_nodes',
             self.start_running_nodes_callback,
             latch_qos,
         )
-        
         self.state_subscription = self.create_subscription(
             JointState,
             'ik/joint_states',
             self.state_callback,
             ik_qos,
         )
-
-        self.init_vel_subscription = self.create_subscription(Float64MultiArray, 'init_vel_robot', self.init_vel_callback, 10)
-
-        self.obj_point_subscription = self.create_subscription(Float64MultiArray, '/obj_point', self.obj_point_callback, latch_qos)
-
-
+        self.init_vel_subscription = self.create_subscription(
+            Float64MultiArray, 
+            'init_vel_robot', 
+            self.init_vel_callback, 
+            10)
+        self.obj_point_subscription = self.create_subscription(
+            Float64MultiArray, 
+            '/obj_point', 
+            self.obj_point_callback, 
+            latch_qos)
         self.get_model_path_subscription = self.create_subscription(
             String,
             '/model_path',
             self.get_model_callback,
             model_path_qos,
         )
-        self.init_subscription = self.create_subscription(Bool, 'start_running_nodes', self.start_running_nodes_callback, latch_qos)
+        self.init_subscription = self.create_subscription(
+            Bool, 
+            'start_running_nodes', 
+            self.start_running_nodes_callback, 
+            latch_qos)
     
     
     def ik_worker(self):
@@ -94,7 +103,6 @@ class InverseKinematicsNodeBodyJacobian(Node):
             with self.mujoco_lock:
                 if self.model is not None and self.robot_data is not None:
                     self.calculate_inverse_kinematics(target)
-
 
     def obj_point_callback(self, msg):
         self.get_logger().info(f"Received object point: {msg.data}")
