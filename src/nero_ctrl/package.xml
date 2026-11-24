@@ -19,6 +19,10 @@
 	<exec_depend>ament_index_python</exec_depend>
 	<exec_depend>agx_arm_ctrl</exec_depend>
 	<exec_depend>rosgraph_msgs</exec_depend>
+	<exec_depend>python3-yaml</exec_depend>
+	<!-- cube_intercept.launch.py: MuJoCo bridge (sim) and ultrasonic_sensor_node (real) -->
+	<exec_depend>agx_arm_description</exec_depend>
+	<exec_depend>ros2_to_mujoco_nero</exec_depend>
 
 	<export>
 		<build_type>ament_python</build_type>

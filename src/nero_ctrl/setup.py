@@ -23,6 +23,10 @@ setup(
 			os.path.join('share', package_name, 'launch'),
 			glob('launch/*.launch.py'),
 		),
+		(
+			os.path.join('share', package_name, 'config'),
+			glob('config/*.yaml'),
+		),
 	],
 	install_requires=['setuptools', 'python-can'],
 	zip_safe=True,
@@ -33,6 +37,8 @@ setup(
             'controller_node = nero_ctrl.controller_node:main',
 			'ik_node = nero_ctrl.IK_node:main',
 			'calibration_node = nero_ctrl.calibration_module:main',
+			'cube_tracker_node = nero_ctrl.cube_tracker_node:main',
+			'intercept_node = nero_ctrl.intercept_node:main',
 		],
 	},
 )
