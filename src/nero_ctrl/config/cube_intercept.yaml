@@ -11,13 +11,15 @@
 cube_tracker_node:
   ros__parameters:
     distance_topic: distance
-    sensor_position: [-0.22, -1.07, 0.084]   # at the start of the conveyor, cube height
+    sensor_position: [-0.22, -1.08, 0.084]   # 3 cm before the start of the conveyor (y = -1.05), cube height
     sensor_direction: [0.0, 1.0, 0.0]        # looking along the conveyor
     cube_half_size: 0.02
     min_valid_range: 0.03
     max_valid_range: 0.80                    # farther = nothing on the conveyor
-    window: 0.6
-    min_samples: 6
+    # The real Arduino publishes at ~7.4 Hz (the simulated sensor at 20 Hz): the window
+    # must hold at least min_samples readings, or the cube is never reported.
+    window: 1.0
+    min_samples: 5
     max_jump: 0.08
 
 intercept_node:

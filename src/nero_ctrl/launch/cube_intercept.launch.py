@@ -11,12 +11,18 @@ picked up. Same nodes for the real arm and for the MuJoCo simulation:
   mode:=real  agx_arm_ctrl over CAN + ultrasonic_sensor_node (Arduino)
   mode:=sim   MuJoCo bridge (mujoco_viewer.py) with the cube and a SIMULATED ultrasonic
               sensor: no hardware needed.
+  mode:=sim sensor:=real
+              MuJoCo arm, but the REAL ultrasonic sensor (Arduino): the simulated cube
+              follows the real readings, so you can move a real cube along the real
+              conveyor and watch the simulated arm intercept it. cube_vy / cube_delay /
+              sensor_noise are ignored.
 
 Parameters: config/cube_intercept.yaml
 
 Examples:
   ros2 launch nero_ctrl cube_intercept.launch.py mode:=sim
   ros2 launch nero_ctrl cube_intercept.launch.py mode:=sim cube_vy:=0.03 rviz:=true
+  ros2 launch nero_ctrl cube_intercept.launch.py mode:=sim sensor:=real usb_port:=/dev/ttyACM0
   ros2 launch nero_ctrl cube_intercept.launch.py mode:=real usb_port:=/dev/ttyACM0
 """
 
@@ -51,6 +57,19 @@ def find_model_dir():
                             'Set NERO_SCENE_XML to its full path.')
 
 
+def real_sensor_node(context, tracker):
+    """Arduino ultrasonic sensor -> sensor_msgs/Range on the tracker's distance topic."""
+    return Node(
+        package='nero_ctrl', executable='ultrasonic_sensor_node',
+        name='ultrasonic', output='screen',
+        parameters=[{
+            'usb_port': LaunchConfiguration('usb_port').perform(context),
+            'baud_rate': int(LaunchConfiguration('baud_rate').perform(context)),
+            'topic': tracker['distance_topic'],
+        }],
+    )
+
+
 def launch_setup(context, *args, **kwargs):
     mode = LaunchConfiguration('mode').perform(context)
     config = os.path.join(get_package_share_directory('nero_ctrl'), 'config', 'cube_intercept.yaml')
@@ -83,25 +102,23 @@ def launch_setup(context, *args, **kwargs):
                 'speed_percent': LaunchConfiguration('speed_percent').perform(context),
             }.items(),
         )
-        sensor = Node(
-            package='nero_ctrl', executable='ultrasonic_sensor_node',
-            name='ultrasonic', output='screen',
-            parameters=[{
-                'usb_port': LaunchConfiguration('usb_port').perform(context),
-                'baud_rate': int(LaunchConfiguration('baud_rate').perform(context)),
-                'topic': tracker['distance_topic'],
-            }],
-        )
-        return [backend, sensor, *nodes]
+        return [backend, real_sensor_node(context, tracker), *nodes]
 
-    # mode == 'sim': the bridge simulates the cube and the ultrasonic sensor, placed
-    # where cube_tracker_node expects it (same YAML).
+    # mode == 'sim': the bridge simulates the cube and, with sensor:=sim, the ultrasonic
+    # sensor too, placed where cube_tracker_node expects it (same YAML).
+    real_sensor = LaunchConfiguration('sensor').perform(context) == 'real'
     pose = list(tracker['sensor_position']) + list(tracker['sensor_direction'])
-    vy = LaunchConfiguration('cube_vy').perform(context)
-    viewer_args = (f'--cube-velocity 0 {vy} 0 '
-                   f'--cube-delay {LaunchConfiguration("cube_delay").perform(context)} '
-                   f'--sensor-pose {" ".join(str(v) for v in pose)} '
-                   f'--sensor-noise {LaunchConfiguration("sensor_noise").perform(context)}')
+    viewer_args = f'--sensor-pose {" ".join(str(v) for v in pose)} '
+    if real_sensor:
+        # The cube follows the Arduino readings; beyond max_valid_range = no cube.
+        viewer_args += (f'--cube-source sensor '
+                        f'--sensor-topic {tracker["distance_topic"]} '
+                        f'--sensor-max {tracker["max_valid_range"]}')
+    else:
+        vy = LaunchConfiguration('cube_vy').perform(context)
+        viewer_args += (f'--cube-velocity 0 {vy} 0 '
+                        f'--cube-delay {LaunchConfiguration("cube_delay").perform(context)} '
+                        f'--sensor-noise {LaunchConfiguration("sensor_noise").perform(context)}')
     backend = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(
             get_package_share_directory('agx_arm_description'), 'launch',
@@ -115,7 +132,8 @@ def launch_setup(context, *args, **kwargs):
     )
     # MuJoCo takes a while to load: start the control nodes once the bridge listens.
     delay = float(LaunchConfiguration('start_delay').perform(context))
-    return [backend, TimerAction(period=delay, actions=nodes)]
+    extra = [real_sensor_node(context, tracker)] if real_sensor else []
+    return [backend, *extra, TimerAction(period=delay, actions=nodes)]
 
 
 def generate_launch_description():
@@ -126,10 +144,13 @@ def generate_launch_description():
         DeclareLaunchArgument('speed_percent', default_value='10',
                               description='Real arm speed (%). Start slow.'),
         DeclareLaunchArgument('usb_port', default_value='/dev/ttyACM0',
-                              description='Arduino serial port (mode:=real)'),
+                              description='Arduino serial port (mode:=real or sensor:=real)'),
         DeclareLaunchArgument('baud_rate', default_value='9600',
                               description='Must match Serial.begin() in the sketch'),
         # sim
+        DeclareLaunchArgument('sensor', default_value='sim', choices=['sim', 'real'],
+                              description='mode:=sim only: simulated ultrasonic sensor, or '
+                                          'the real Arduino driving the simulated cube'),
         DeclareLaunchArgument('cube_vy', default_value='0.05',
                               description='Cube speed along the conveyor, m/s (mode:=sim)'),
         DeclareLaunchArgument('cube_delay', default_value='10.0',
