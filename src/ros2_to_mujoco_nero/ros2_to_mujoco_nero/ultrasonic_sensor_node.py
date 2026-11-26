@@ -17,6 +17,7 @@ class Ultrasonic(Node):
         self.declare_parameter('min_range', 0.02)
         self.declare_parameter('max_range', 4.0)
         self.declare_parameter('field_of_view', 0.26)
+        self.declare_parameter('publish_rate', 50.0)
 
         topic = self.get_parameter('topic').value
         port = self.get_parameter('usb_port').value
@@ -25,6 +26,7 @@ class Ultrasonic(Node):
         self.min_range = float(self.get_parameter('min_range').value)
         self.max_range = float(self.get_parameter('max_range').value)
         self.fov = float(self.get_parameter('field_of_view').value)
+        publish_rate = float(self.get_parameter('publish_rate').value)
 
         self.publisher_ = self.create_publisher(Range, topic, 10)
 
@@ -37,7 +39,7 @@ class Ultrasonic(Node):
         self.ser.reset_input_buffer()
         self.get_logger().info(f'Reading {port} @ {baud} baud, publishing on "{topic}"')
 
-        self.timer = self.create_timer(0.02, self.ultrasonic_callback)
+        self.timer = self.create_timer(1.0 / publish_rate, self.ultrasonic_callback)
 
     def serial_rx(self):
         """Read all pending lines and return the latest valid value in cm, or None."""
@@ -47,9 +49,15 @@ class Ultrasonic(Node):
             if not line:
                 continue
             try:
-                latest = float(line)
+                value = float(line)
             except ValueError:
                 self.get_logger().debug(f'Ignoring malformed line: {line!r}')
+                continue
+            if value < 0:
+                # Sensor sends -1.0 for an invalid reading.
+                self.get_logger().debug(f'Ignoring invalid reading: {value}')
+                continue
+            latest = value
         return latest
 
     def ultrasonic_callback(self):
