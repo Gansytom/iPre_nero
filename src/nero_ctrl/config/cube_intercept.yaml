@@ -1,0 +1,50 @@
+# Cube intercept routine (nero_ctrl) -- used by launch/cube_intercept.launch.py
+# All positions are in the robot base frame (base_link), meters / radians.
+#
+# If the conveyor moves with respect to the arm, these are the values to review:
+#   - cube_tracker_node.sensor_position / sensor_direction (where the sensor is)
+#   - intercept_node.intercept_x_range / intercept_y_range (part of the conveyor to grasp)
+#   - intercept_node.ready_joints and grasp_rpy (must give a valid IK there)
+# In mode:=sim the simulated sensor of the MuJoCo bridge uses the same
+# sensor_position / sensor_direction (the launch file reads them from here).
+
+cube_tracker_node:
+  ros__parameters:
+    distance_topic: distance
+    sensor_position: [-0.22, -1.08, 0.084]   # 3 cm before the start of the conveyor (y = -1.05), cube height
+    sensor_direction: [0.0, 1.0, 0.0]        # looking along the conveyor
+    cube_half_size: 0.02
+    min_valid_range: 0.03
+    max_valid_range: 0.80                    # farther = nothing on the conveyor
+    # The real Arduino publishes at ~7.4 Hz (the simulated sensor at 20 Hz): the window
+    # must hold at least min_samples readings, or the cube is never reported.
+    window: 1.0
+    min_samples: 5
+    max_jump: 0.08
+
+intercept_node:
+  ros__parameters:
+    # Joint pose above the conveyor, gripper pointing down (IK seed for the grasp).
+    # REAL ARM: check that moving here is safe in your workspace before running.
+    # Conveyor along +y, axis at x = -0.22 m, ending 25 cm from the base (y = -0.25).
+    ready_joints: [0.862, 0.557, 0.263, 1.285, -0.263, -0.433, 1.291]
+    grasp_rpy: [0.0, 1.5707963, 0.0]          # pitch 90 deg (down), yaw 0: fingers open along x
+    intercept_x_range: [-0.26, -0.18]
+    intercept_y_range: [-0.40, -0.27]         # last ~15 cm of the conveyor
+    pregrasp_z: 0.16
+    grasp_z_offset: -0.004
+    lift_z: 0.16
+    gripper_open: 0.10        # total width (m)
+    gripper_closed: 0.0
+    grasp_min_width: 0.015
+    approach_time: 5.0        # s from planning until the gripper waits at grasp height
+    descend_time: 2.0
+    time_margin: 0.5
+    close_lead_time: 0.15
+    close_wait: 1.5
+    min_speed: 0.01          # m/s; below this the cube counts as static (sensor noise)
+    joint_tolerance: 0.02
+    settle_time: 0.3
+    move_timeout: 20.0
+    cube_timeout: 3.0
+    max_attempts: 3

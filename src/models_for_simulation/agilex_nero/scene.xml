@@ -1,7 +1,10 @@
 <mujoco model="nero_scene">
   <include file="nero.xml"/>
+  <!-- Cinta transportadora (solo escenografia): eje en x = -0.22 m, de y = -1.05 a -0.25 (termina a 25 cm de la base): el cubo avanza en +y hacia el brazo.
+       La superficie de la banda queda a z = 0.064 m. -->
+  <include file="cinta.xml"/>
 
-  <statistic center="0 0 0.1" extent="0.4"/>
+  <statistic center="0.2 0 0.2" extent="0.6"/>
 
   <visual>
     <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0"/>
@@ -19,5 +22,21 @@
   <worldbody>
     <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
     <geom name="floor" size="0 0 0.05" type="plane" material="groundplane"/>
+
+    <!-- Cubo de 4 cm (size = semi-dimensiones). Parte en un extremo de la cinta, apoyado
+         sobre la banda (z = 0.064 + 0.02). gravcomp="1" anula su peso mientras viaja;
+         mujoco_node le impone la velocidad constante y le devuelve la gravedad al agarrarlo. -->
+    <body name="cube" pos="-0.22 -1.00 0.084" gravcomp="1">
+      <freejoint name="cube_free"/>
+      <geom name="cube_geom" type="box" size="0.02 0.02 0.02" rgba="0.2 0.2 0.8 1"
+            mass="0.05" friction="1.5 0.01 0.001" condim="4"/>
+    </body>
   </worldbody>
+
+  <!-- El cubo no colisiona con el piso ni con la cinta (sin friccion que lo frene),
+       pero si con los dedos del gripper (contype/conaffinity por defecto = 1). -->
+  <contact>
+    <exclude body1="world" body2="cube"/>
+    <exclude body1="base_cinta" body2="cube"/>
+  </contact>
 </mujoco>
