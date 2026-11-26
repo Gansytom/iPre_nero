@@ -67,6 +67,12 @@ class CanModule(Node):
 
         # send_initial_pose=False: another node (e.g. intercept_node) moves the arm to its
         # own start pose; can_module only forwards commands and feedback.
+        # forward_ik_gripper=True: the IK result (incl. the gripper value of
+        # input_obj_position) goes to move_j as is. False: arm joints only, the gripper is
+        # driven exclusively by gripper_command (used by intercept_node, so an IK result
+        # does not reopen the gripper while holding the cube).
+        self.declare_parameter('forward_ik_gripper', True)
+        self.forward_ik_gripper = bool(self.get_parameter('forward_ik_gripper').value)
         self.declare_parameter('send_initial_pose', True)
         if not self.get_parameter('send_initial_pose').value:
             self.initial_pose_timer.cancel()
@@ -151,6 +157,9 @@ class CanModule(Node):
     def ik_result_callback(self, msg):
         self.get_logger().info(f"Received IK result: {msg.position}")
         # initially only with movej
+        if self.forward_ik_gripper:
+            self.move_j_pub.publish(msg)
+            return
         arm = self._arm_only(msg)
         if len(arm.name) == len(self.joint_names):
             self.move_j_pub.publish(arm)

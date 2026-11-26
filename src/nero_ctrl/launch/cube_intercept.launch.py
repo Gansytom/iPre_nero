@@ -60,7 +60,7 @@ def launch_setup(context, *args, **kwargs):
     nodes = [
         Node(package='nero_ctrl', executable='main_node', name='main_node', output='screen'),
         Node(package='nero_ctrl', executable='can_module', name='can_module', output='screen',
-             parameters=[{'send_initial_pose': False}]),
+             parameters=[{'send_initial_pose': False, 'forward_ik_gripper': False}]),
         Node(package='nero_ctrl', executable='ik_node', name='inverse_kinematics_node',
              output='screen'),
         Node(package='nero_ctrl', executable='cube_tracker_node', name='cube_tracker_node',

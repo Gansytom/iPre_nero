@@ -15,7 +15,8 @@ Inputs
 
 Outputs (can_module is the only node that talks to the arm)
   joint_goal             JointState, joint-space goal (ready pose)
-  input_obj_position     [x, y, z, roll, pitch, yaw] -> main_node -> ik_node -> can_module
+  input_obj_position     [x, y, z, roll, pitch, yaw (deg), gripper] -> main_node (deg->rad)
+                         -> ik_node -> can_module (gripper value ignored: forward_ik_gripper=false)
   gripper_command        Float64, gripper width in m
 
 Unlike the simulation-only version (ros2_to_mujoco_nero), every step waits until the
@@ -97,6 +98,7 @@ class InterceptNode(Node):
         self.intercept = None
         self.motion_dir = None
         self.attempts = 0
+        self.gripper_target = self.gripper_open   # last commanded width
 
         # ---------------- ROS interfaces ----------------
         latch_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
@@ -169,7 +171,10 @@ class InterceptNode(Node):
 
     def send_pose(self, xyz):
         msg = Float64MultiArray()
-        msg.data = [float(v) for v in xyz] + self.grasp_rpy
+        # main_node expects roll/pitch/yaw in degrees and a 7th gripper element; the
+        # gripper is driven by gripper_command, the value here is only informative.
+        msg.data = ([float(v) for v in xyz] + [float(np.degrees(a)) for a in self.grasp_rpy]
+                    + [float(self.gripper_target)])
         self.goal_source = 'ik'
         self.waiting_ik = True
         self.goal_q = None
@@ -177,6 +182,7 @@ class InterceptNode(Node):
         self.get_logger().info(f'Target pose: {np.round(msg.data, 3).tolist()}')
 
     def send_gripper(self, width):
+        self.gripper_target = float(width)
         self.gripper_pub.publish(Float64(data=float(width)))
 
     def arrived(self):
