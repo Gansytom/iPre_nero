@@ -668,6 +668,13 @@ class MujocoBridge(Node):
             return
         self._cube_qadr = int(joint.qposadr[0])
         self._cube_dadr = int(joint.dofadr[0])
+        # The 'home' keyframe (nero.xml) lists only the arm joints; depending on the
+        # MuJoCo version the missing cube_free values come out as zeros (cube at the
+        # origin, inside the base) instead of qpos0. Restore the pose from the XML.
+        self.data.qpos[self._cube_qadr:self._cube_qadr + 7] = \
+            self.model.qpos0[self._cube_qadr:self._cube_qadr + 7]
+        self.data.qvel[self._cube_dadr:self._cube_dadr + 6] = 0.0
+        mujoco.mj_forward(self.model, self.data)
         self._cube_vel = np.asarray(cube_velocity, dtype=float)
         self._cube_released = False
         self._cube_delay = float(cube_delay)   # s of simulated time the cube waits still
