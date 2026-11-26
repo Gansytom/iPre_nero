@@ -39,6 +39,8 @@ setup(
 			'calibration_node = nero_ctrl.calibration_module:main',
 			'cube_tracker_node = nero_ctrl.cube_tracker_node:main',
 			'intercept_node = nero_ctrl.intercept_node:main',
+			'ultrasonic_sensor_node = nero_ctrl.ultrasonic_sensor_node:main',
+			'velocity_estimate_node = nero_ctrl.velocity_estimate_node:main',
 		],
 	},
 )

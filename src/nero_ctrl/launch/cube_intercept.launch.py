@@ -84,7 +84,7 @@ def launch_setup(context, *args, **kwargs):
             }.items(),
         )
         sensor = Node(
-            package='ros2_to_mujoco_nero', executable='ultrasonic_sensor_node',
+            package='nero_ctrl', executable='ultrasonic_sensor_node',
             name='ultrasonic', output='screen',
             parameters=[{
                 'usb_port': LaunchConfiguration('usb_port').perform(context),
