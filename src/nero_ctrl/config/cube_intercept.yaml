@@ -7,15 +7,24 @@
 #   - intercept_node.ready_joints and grasp_rpy (must give a valid IK there)
 # In mode:=sim the simulated sensor of the MuJoCo bridge uses the same
 # sensor_position / sensor_direction (the launch file reads them from here).
+#
+# Layout measured on the real setup (2026-11-26), base_link frame:
+#   conveyor axis x = -0.285 (23 cm from the base block corner at x = -0.055)
+#   belt from y = -0.914 (sensor end) to y = -0.117 (7.7 cm from the corner at y = -0.04)
+#   belt surface z = 0.064, cube 5 cm -> cube center z = 0.089
 
 cube_tracker_node:
   ros__parameters:
     distance_topic: distance
-    sensor_position: [-0.22, -1.08, 0.084]   # 3 cm before the start of the conveyor (y = -1.05), cube height
+    # 4.5 cm before the belt start (y = -0.914). Real sensor is 9 cm above the table; z is
+    # set to the cube center (0.089) because the tracker reports the cube at this height.
+    sensor_position: [-0.285, -0.959, 0.089]
     sensor_direction: [0.0, 1.0, 0.0]        # looking along the conveyor
-    cube_half_size: 0.02
+    cube_half_size: 0.025                    # 5 cm cube
     min_valid_range: 0.03
-    max_valid_range: 0.80                    # farther = nothing on the conveyor
+    # Cube at the end of the belt reads 0.788 m, empty belt reads 0.824 m: 0.80 keeps
+    # ~1.2 cm margin on each side against sensor noise.
+    max_valid_range: 0.80
     # The real Arduino publishes at ~7.4 Hz (the simulated sensor at 20 Hz): the window
     # must hold at least min_samples readings, or the cube is never reported.
     window: 1.0
@@ -26,11 +35,14 @@ intercept_node:
   ros__parameters:
     # Joint pose above the conveyor, gripper pointing down (IK seed for the grasp).
     # REAL ARM: check that moving here is safe in your workspace before running.
-    # Conveyor along +y, axis at x = -0.22 m, ending 25 cm from the base (y = -0.25).
-    ready_joints: [0.862, 0.557, 0.263, 1.285, -0.263, -0.433, 1.291]
+    # Conveyor along +y, axis at x = -0.285 m, belt ending at y = -0.117.
+    # IK of (-0.285, -0.31, 0.16) with grasp_rpy; >= 0.10 rad from every joint limit.
+    ready_joints: [0.693, 0.551, 0.219, 1.29, -0.313, -0.634, 1.249]
     grasp_rpy: [0.0, 1.5707963, 0.0]          # pitch 90 deg (down), yaw 0: fingers open along x
-    intercept_x_range: [-0.26, -0.18]
-    intercept_y_range: [-0.40, -0.27]         # last ~15 cm of the conveyor
+    intercept_x_range: [-0.315, -0.255]       # belt center +-3 cm
+    # IK reaches pregrasp (z 0.16) + grasp + lift for y in [-0.42, -0.20] over the whole
+    # x range; closer to the belt end joint6 hits its limit at pregrasp height.
+    intercept_y_range: [-0.40, -0.22]
     pregrasp_z: 0.16
     grasp_z_offset: -0.004
     lift_z: 0.16
